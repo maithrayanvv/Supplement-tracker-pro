@@ -1,1 +1,1741 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supplement Tracker Pro</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            amber: {
+              400: '#fbbf24',
+              500: '#f59e0b',
+              600: '#d97706',
+            },
+            charcoal: {
+              800: '#1e1c1a',
+              900: '#141312',
+              950: '#0d0c0b',
+            },
+            cream: {
+              50: '#fdfcf9',
+              100: '#f7f4ed',
+              200: '#ede6d8',
+              800: '#4a443b',
+              900: '#2b2721',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18, ReactDOM, Babel -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <!-- Recharts + Prop-types -->
+  <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
+  <script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+
+  <style>
+    /* Smooth theme transitions */
+    body {
+      transition: background-color 0.2s ease, color 0.2s ease;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+    /* Custom scrollbar for gym aesthetic */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3d3935; border-radius: 4px; }
+    .light ::-webkit-scrollbar-thumb { background: #d0c8b8; }
+  </style>
+</head>
+<body class="bg-charcoal-950 text-cream-100 min-h-screen selection:bg-amber-500 selection:text-black">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+    const { 
+      BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+      PieChart, Pie, Cell, AreaChart, Area 
+    } = window.Recharts || {};
+
+    // Helper: format YYYY-MM-DD
+    const formatDate = (date) => {
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    const getTodayStr = () => formatDate(new Date());
+
+    // Default Seed Data
+    const INITIAL_SUPPLEMENTS = [
+      {
+        id: 'supp-1',
+        name: 'Gold Standard 100% Whey',
+        brand: 'Optimum Nutrition',
+        flavor: 'Double Rich Chocolate',
+        type: 'protein',
+        containerWeight: 2270,
+        gramsPerScoop: 30.4,
+        scoopsPerDay: 2,
+        price: 79.99,
+        store: 'Bodybuilding.com',
+        openedDate: '2026-07-20',
+        workoutOnly: false,
+        stockCount: 1,
+        schedule: ['08:00', '18:00'],
+        doseHistory: [
+          { id: 'd1', date: '2026-08-14', time: '08:05', slot: '08:00', grams: 30.4 },
+          { id: 'd2', date: '2026-08-14', time: '18:15', slot: '18:00', grams: 30.4 },
+          { id: 'd3', date: '2026-08-15', time: '08:10', slot: '08:00', grams: 30.4 },
+          { id: 'd4', date: '2026-08-15', time: '18:30', slot: '18:00', grams: 30.4 },
+          { id: 'd5', date: '2026-08-16', time: '08:00', slot: '08:00', grams: 30.4 },
+        ]
+      },
+      {
+        id: 'supp-2',
+        name: 'Creapure Micronized Creatine',
+        brand: 'Creapure',
+        flavor: 'Unflavored',
+        type: 'creatine',
+        containerWeight: 500,
+        gramsPerScoop: 5,
+        scoopsPerDay: 1,
+        price: 29.50,
+        store: 'Amazon',
+        openedDate: '2026-08-01',
+        workoutOnly: false,
+        stockCount: 0,
+        schedule: ['09:00'],
+        doseHistory: [
+          { id: 'c1', date: '2026-08-14', time: '09:00', slot: '09:00', grams: 5 },
+          { id: 'c2', date: '2026-08-15', time: '09:15', slot: '09:00', grams: 5 },
+          { id: 'c3', date: '2026-08-16', time: '09:05', slot: '09:00', grams: 5 },
+        ]
+      },
+      {
+        id: 'supp-3',
+        name: 'Total War Pre-Workout',
+        brand: 'Redcon1',
+        flavor: 'Blue Lemonade',
+        type: 'preworkout',
+        containerWeight: 440,
+        gramsPerScoop: 14.7,
+        scoopsPerDay: 1,
+        price: 42.00,
+        store: 'GNC',
+        openedDate: '2026-08-10',
+        workoutOnly: true,
+        stockCount: 1,
+        schedule: ['17:00'],
+        doseHistory: [
+          { id: 'p1', date: '2026-08-15', time: '17:00', slot: '17:00', grams: 14.7 }
+        ]
+      }
+    ];
+
+    const INITIAL_ORDERS = [
+      { id: 'o-1', supplementId: 'supp-1', name: 'Gold Standard 100% Whey', price: 79.99, store: 'Bodybuilding.com', date: '2026-07-15' },
+      { id: 'o-2', supplementId: 'supp-2', name: 'Creapure Micronized Creatine', price: 29.50, store: 'Amazon', date: '2026-07-28' },
+      { id: 'o-3', supplementId: 'supp-3', name: 'Total War Pre-Workout', price: 42.00, store: 'GNC', date: '2026-08-05' },
+    ];
+
+    // Calculate dynamic streak based on scheduled slots
+    function calculateStreak(supp) {
+      if (!supp.doseHistory || supp.doseHistory.length === 0) return 0;
+      
+      const requiredSlotsCount = (supp.schedule && supp.schedule.length > 0) ? supp.schedule.length : 1;
+      
+      // Group dose count by date
+      const dosesByDate = {};
+      supp.doseHistory.forEach(d => {
+        dosesByDate[d.date] = (dosesByDate[d.date] || 0) + 1;
+      });
+
+      const today = new Date();
+      let streak = 0;
+      let checkDate = new Date(today);
+
+      const todayStr = formatDate(checkDate);
+      const todayDone = (dosesByDate[todayStr] || 0) >= requiredSlotsCount;
+
+      if (todayDone) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        // If today is not done yet, streak can still be alive from yesterday
+        checkDate.setDate(checkDate.getDate() - 1);
+      }
+
+      while (true) {
+        const curStr = formatDate(checkDate);
+        const count = dosesByDate[curStr] || 0;
+        if (count >= requiredSlotsCount) {
+          streak++;
+          checkDate.setDate(checkDate.getDate() - 1);
+        } else {
+          break;
+        }
+      }
+
+      return streak;
+    }
+
+    // App Component
+    function App() {
+      const [supplements, setSupplements] = useState(() => {
+        try {
+          const saved = localStorage.getItem('stp_supplements');
+          return saved ? JSON.parse(saved) : INITIAL_SUPPLEMENTS;
+        } catch (e) {
+          return INITIAL_SUPPLEMENTS;
+        }
+      });
+
+      const [orders, setOrders] = useState(() => {
+        try {
+          const saved = localStorage.getItem('stp_orders');
+          return saved ? JSON.parse(saved) : INITIAL_ORDERS;
+        } catch (e) {
+          return INITIAL_ORDERS;
+        }
+      });
+
+      const [theme, setTheme] = useState(() => localStorage.getItem('stp_theme') || 'dark');
+      const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+        return localStorage.getItem('stp_notifications') === 'true';
+      });
+
+      const [currentTab, setCurrentTab] = useState('dashboard');
+      const [selectedSuppId, setSelectedSuppId] = useState(null);
+      const [logModalSupp, setLogModalSupp] = useState(null);
+      const [showNewSuppModal, setShowNewSuppModal] = useState(false);
+      const [showNewOrderModal, setShowNewOrderModal] = useState(false);
+      const [lastSavedText, setLastSavedText] = useState('Saved just now');
+      const [lastSavedTimestamp, setLastSavedTimestamp] = useState(Date.now());
+
+      // Sync theme to root class
+      useEffect(() => {
+        const root = document.documentElement;
+        if (theme === 'dark') {
+          root.classList.add('dark');
+          root.classList.remove('light');
+          document.body.className = "bg-charcoal-950 text-cream-100 min-h-screen selection:bg-amber-500 selection:text-black";
+        } else {
+          root.classList.remove('dark');
+          root.classList.add('light');
+          document.body.className = "bg-cream-100 text-cream-900 min-h-screen selection:bg-amber-500 selection:text-black";
+        }
+        localStorage.setItem('stp_theme', theme);
+      }, [theme]);
+
+      // Save to localStorage & trigger indicator
+      useEffect(() => {
+        try {
+          localStorage.setItem('stp_supplements', JSON.stringify(supplements));
+          localStorage.setItem('stp_orders', JSON.stringify(orders));
+          setLastSavedTimestamp(Date.now());
+          setLastSavedText('Saved just now');
+        } catch (e) {
+          console.error("Storage save failed", e);
+        }
+      }, [supplements, orders]);
+
+      // Dynamic Saved ticker ("Saved 12s ago", etc.)
+      useEffect(() => {
+        const timer = setInterval(() => {
+          const sec = Math.floor((Date.now() - lastSavedTimestamp) / 1000);
+          if (sec < 5) setLastSavedText('Saved just now');
+          else if (sec < 60) setLastSavedText(`Saved ${sec}s ago`);
+          else setLastSavedText(`Saved ${Math.floor(sec / 60)}m ago`);
+        }, 5000);
+        return () => clearInterval(timer);
+      }, [lastSavedTimestamp]);
+
+      // Browser Reminders Check (Every 30 seconds)
+      useEffect(() => {
+        if (!notificationsEnabled) return;
+
+        const interval = setInterval(() => {
+          const now = new Date();
+          const currentHHMM = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+          const todayStr = getTodayStr();
+
+          supplements.forEach(supp => {
+            if (supp.schedule && supp.schedule.includes(currentHHMM)) {
+              // Check if dose logged today for this slot
+              const doseLogged = supp.doseHistory?.some(d => d.date === todayStr && d.slot === currentHHMM);
+              if (!doseLogged && Notification.permission === 'granted') {
+                new Notification(`Supplement Reminder: ${supp.name}`, {
+                  body: `Time for your ${currentHHMM} dose (${supp.gramsPerScoop || 0}g)!`,
+                  icon: 'https://cdn-icons-png.flaticon.com/512/3004/3004458.png'
+                });
+              }
+            }
+          });
+        }, 30000);
+
+        return () => clearInterval(interval);
+      }, [notificationsEnabled, supplements]);
+
+      // Lucide icon re-trigger
+      useEffect(() => {
+        if (window.lucide) {
+          window.lucide.createIcons();
+        }
+      });
+
+      // Quick log dose handler
+      const handleLogDose = (suppId, slotTime, grams) => {
+        const now = new Date();
+        const timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        const newDose = {
+          id: 'dose-' + Date.now(),
+          date: getTodayStr(),
+          time: timeStr,
+          slot: slotTime || 'Extra',
+          grams: Number(grams) || 0
+        };
+
+        setSupplements(prev => prev.map(s => {
+          if (s.id === suppId) {
+            return {
+              ...s,
+              doseHistory: [newDose, ...(s.doseHistory || [])]
+            };
+          }
+          return s;
+        }));
+        setLogModalSupp(null);
+      };
+
+      // Undo last dose for specific supplement
+      const handleUndoLastDose = (suppId) => {
+        setSupplements(prev => prev.map(s => {
+          if (s.id === suppId && s.doseHistory?.length > 0) {
+            return {
+              ...s,
+              doseHistory: s.doseHistory.slice(1)
+            };
+          }
+          return s;
+        }));
+      };
+
+      // Backfill missing doses from a start date
+      const handleBackfill = (suppId, startDateStr) => {
+        if (!startDateStr) return;
+        const start = new Date(startDateStr);
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+
+        if (start > yesterday) {
+          alert("Backfill date must be yesterday or earlier.");
+          return;
+        }
+
+        setSupplements(prev => prev.map(s => {
+          if (s.id === suppId) {
+            const existingDates = new Set((s.doseHistory || []).map(d => d.date));
+            const newHistory = [...(s.doseHistory || [])];
+            let current = new Date(start);
+            const defaultSlot = (s.schedule && s.schedule[0]) || '08:00';
+            const defaultGrams = (s.gramsPerScoop || 5) * (s.scoopsPerDay || 1);
+
+            while (current <= yesterday) {
+              const dStr = formatDate(current);
+              if (!existingDates.has(dStr)) {
+                newHistory.push({
+                  id: 'bf-' + dStr + '-' + Math.random().toString(36).substr(2, 5),
+                  date: dStr,
+                  time: defaultSlot,
+                  slot: defaultSlot,
+                  grams: defaultGrams
+                });
+              }
+              current.setDate(current.getDate() + 1);
+            }
+
+            // Sort chronological descending
+            newHistory.sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+
+            return { ...s, doseHistory: newHistory };
+          }
+          return s;
+        }));
+      };
+
+      // Best overall streak
+      const bestStreak = useMemo(() => {
+        if (!supplements.length) return 0;
+        return Math.max(...supplements.map(s => calculateStreak(s)), 0);
+      }, [supplements]);
+
+      // Pending doses today
+      const pendingDosesToday = useMemo(() => {
+        const todayStr = getTodayStr();
+        let pending = 0;
+        supplements.forEach(s => {
+          const req = s.schedule?.length || 1;
+          const done = (s.doseHistory || []).filter(d => d.date === todayStr).length;
+          if (done < req) pending += (req - done);
+        });
+        return pending;
+      }, [supplements]);
+
+      // Low stock count (less than 7 days left)
+      const lowStockCount = useMemo(() => {
+        return supplements.filter(s => {
+          const dailyGrams = (s.gramsPerScoop || 0) * (s.scoopsPerDay || 1);
+          if (dailyGrams <= 0) return false;
+          const totalConsumed = (s.doseHistory || []).reduce((acc, d) => acc + (d.grams || 0), 0);
+          const currentContainerRemain = Math.max(0, (s.containerWeight || 0) - (totalConsumed % (s.containerWeight || 1)));
+          const daysLeft = currentContainerRemain / dailyGrams;
+          return daysLeft < 7 && (s.stockCount || 0) === 0;
+        }).length;
+      }, [supplements]);
+
+      // Active supplement for detail view
+      const selectedSupp = supplements.find(s => s.id === selectedSuppId);
+
+      return (
+        <div className="flex flex-col min-h-screen">
+          {/* Top Sticky Header */}
+          <header className="sticky top-0 z-30 bg-charcoal-900/90 dark:bg-charcoal-900/90 light:bg-cream-50/90 backdrop-blur border-b border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 px-4 lg:px-8 py-3.5 flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center shadow-lg shadow-amber-500/20 text-charcoal-950 font-black text-xl">
+                ⚡
+              </div>
+              <div>
+                <h1 className="text-lg font-bold tracking-tight text-cream-50 dark:text-cream-50 light:text-cream-900">
+                  Supplement Tracker Pro
+                </h1>
+                <p className="text-xs text-amber-500 font-medium tracking-wide">
+                  Built by Velprakash
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-4">
+              {/* Autosave badge */}
+              <div className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs bg-charcoal-800/80 dark:bg-charcoal-800/80 light:bg-cream-200/80 text-cream-200 dark:text-cream-200 light:text-cream-800 border border-charcoal-700 dark:border-charcoal-700 light:border-cream-300">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>{lastSavedText}</span>
+              </div>
+
+              {/* Theme Toggle */}
+              <button 
+                onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+                className="p-2 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 hover:text-amber-500 text-cream-100 dark:text-cream-100 light:text-cream-900 transition-colors"
+                title="Toggle Light/Dark Mode"
+              >
+                {theme === 'dark' ? '☀️' : '🌙'}
+              </button>
+            </div>
+          </header>
+
+          {/* Navigation Bar */}
+          <nav className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 border-b border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 px-4 lg:px-8">
+            <div className="flex space-x-2 overflow-x-auto py-2">
+              {[
+                { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
+                { id: 'supplements', label: 'Supplements', icon: 'pill' },
+                { id: 'orders', label: 'Orders & Restock', icon: 'shopping-cart' },
+                { id: 'expenses', label: 'Expenses', icon: 'dollar-sign' },
+                { id: 'settings', label: 'Settings', icon: 'settings' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setCurrentTab(tab.id);
+                    if (tab.id !== 'supplements') setSelectedSuppId(null);
+                  }}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${
+                    currentTab === tab.id 
+                      ? 'bg-amber-500 text-charcoal-950 shadow-md shadow-amber-500/20' 
+                      : 'text-cream-200 dark:text-cream-200 light:text-cream-800 hover:bg-charcoal-800 dark:hover:bg-charcoal-800 light:hover:bg-cream-200'
+                  }`}
+                >
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+
+          {/* Main Content Area */}
+          <main className="flex-1 p-4 lg:p-8 max-w-7xl w-full mx-auto">
+            {currentTab === 'dashboard' && (
+              <DashboardView 
+                supplements={supplements} 
+                orders={orders}
+                bestStreak={bestStreak}
+                pendingDosesToday={pendingDosesToday}
+                lowStockCount={lowStockCount}
+                onOpenLogModal={(supp) => setLogModalSupp(supp)}
+                onSelectSupp={(id) => { setSelectedSuppId(id); setCurrentTab('supplements'); }}
+              />
+            )}
+
+            {currentTab === 'supplements' && !selectedSuppId && (
+              <SupplementsView 
+                supplements={supplements}
+                onOpenLogModal={(supp) => setLogModalSupp(supp)}
+                onSelectSupp={(id) => setSelectedSuppId(id)}
+                onOpenNewSuppModal={() => setShowNewSuppModal(true)}
+              />
+            )}
+
+            {currentTab === 'supplements' && selectedSupp && (
+              <SupplementDetailView 
+                supp={selectedSupp}
+                orders={orders.filter(o => o.supplementId === selectedSupp.id)}
+                onBack={() => setSelectedSuppId(null)}
+                onUpdateSupp={(updated) => {
+                  setSupplements(prev => prev.map(s => s.id === updated.id ? updated : s));
+                }}
+                onDeleteSupp={(id) => {
+                  setSupplements(prev => prev.filter(s => s.id !== id));
+                  setSelectedSuppId(null);
+                }}
+                onBackfill={(startDate) => handleBackfill(selectedSupp.id, startDate)}
+                onUndoLast={() => handleUndoLastDose(selectedSupp.id)}
+                onOpenLogModal={() => setLogModalSupp(selectedSupp)}
+              />
+            )}
+
+            {currentTab === 'orders' && (
+              <OrdersView 
+                orders={orders}
+                supplements={supplements}
+                onOpenNewOrderModal={() => setShowNewOrderModal(true)}
+                onDeleteOrder={(id) => setOrders(prev => prev.filter(o => o.id !== id))}
+              />
+            )}
+
+            {currentTab === 'expenses' && (
+              <ExpensesView 
+                supplements={supplements}
+                orders={orders}
+              />
+            )}
+
+            {currentTab === 'settings' && (
+              <SettingsView 
+                supplements={supplements}
+                orders={orders}
+                theme={theme}
+                setTheme={setTheme}
+                notificationsEnabled={notificationsEnabled}
+                setNotificationsEnabled={setNotificationsEnabled}
+                onRestoreData={(data) => {
+                  if (data.supplements) setSupplements(data.supplements);
+                  if (data.orders) setOrders(data.orders);
+                  alert('Data restored successfully!');
+                }}
+                lastSavedText={lastSavedText}
+              />
+            )}
+          </main>
+
+          {/* Quick Log Dose Modal */}
+          {logModalSupp && (
+            <LogDoseModal 
+              supp={logModalSupp}
+              onClose={() => setLogModalSupp(null)}
+              onConfirm={(slot, grams) => handleLogDose(logModalSupp.id, slot, grams)}
+            />
+          )}
+
+          {/* Add Supplement Modal */}
+          {showNewSuppModal && (
+            <NewSupplementModal 
+              onClose={() => setShowNewSuppModal(false)}
+              onAdd={(newSupp) => {
+                setSupplements(prev => [newSupp, ...prev]);
+                setShowNewSuppModal(false);
+              }}
+            />
+          )}
+
+          {/* Add Order Modal */}
+          {showNewOrderModal && (
+            <NewOrderModal 
+              supplements={supplements}
+              onClose={() => setShowNewOrderModal(false)}
+              onAdd={(newOrder) => {
+                setOrders(prev => [newOrder, ...prev]);
+                // Automatically increment stock if checked
+                if (newOrder.addStock && newOrder.supplementId) {
+                  setSupplements(prev => prev.map(s => s.id === newOrder.supplementId ? { ...s, stockCount: (s.stockCount || 0) + 1 } : s));
+                }
+                setShowNewOrderModal(false);
+              }}
+            />
+          )}
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 1. DASHBOARD VIEW
+    // ==========================================
+    function DashboardView({ supplements, orders, bestStreak, pendingDosesToday, lowStockCount, onOpenLogModal, onSelectSupp }) {
+      const todayStr = getTodayStr();
+
+      // Chart: Spend by supplement
+      const spendData = useMemo(() => {
+        return supplements.map(s => {
+          const suppOrders = orders.filter(o => o.supplementId === s.id);
+          const totalSpent = suppOrders.reduce((acc, o) => acc + (o.price || 0), 0) || (s.price || 0);
+          return {
+            name: s.name.length > 14 ? s.name.slice(0, 14) + '...' : s.name,
+            spend: Number(totalSpent.toFixed(2))
+          };
+        }).sort((a, b) => b.spend - a.spend);
+      }, [supplements, orders]);
+
+      return (
+        <div className="space-y-6">
+          {/* Stat Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-4 rounded-xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex flex-col justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-500">Best Streak</span>
+              <div className="flex items-baseline space-x-2 mt-2">
+                <span className="text-3xl font-black">{bestStreak}</span>
+                <span className="text-sm font-medium text-cream-200 dark:text-cream-200 light:text-cream-800">days</span>
+              </div>
+            </div>
+
+            <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-4 rounded-xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex flex-col justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-500">Pending Doses</span>
+              <div className="flex items-baseline space-x-2 mt-2">
+                <span className={`text-3xl font-black ${pendingDosesToday > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {pendingDosesToday}
+                </span>
+                <span className="text-sm font-medium text-cream-200 dark:text-cream-200 light:text-cream-800">remaining</span>
+              </div>
+            </div>
+
+            <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-4 rounded-xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex flex-col justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-500">Low Stock Alert</span>
+              <div className="flex items-baseline space-x-2 mt-2">
+                <span className={`text-3xl font-black ${lowStockCount > 0 ? 'text-rose-400' : 'text-cream-100 dark:text-cream-100 light:text-cream-900'}`}>
+                  {lowStockCount}
+                </span>
+                <span className="text-sm font-medium text-cream-200 dark:text-cream-200 light:text-cream-800">&lt;7 days left</span>
+              </div>
+            </div>
+
+            <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-4 rounded-xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex flex-col justify-between">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-500">Total Tracked</span>
+              <div className="flex items-baseline space-x-2 mt-2">
+                <span className="text-3xl font-black">{supplements.length}</span>
+                <span className="text-sm font-medium text-cream-200 dark:text-cream-200 light:text-cream-800">supplements</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Today's Schedule List */}
+            <div className="lg:col-span-2 bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-5 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-bold">Today's Schedule</h2>
+                  <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Log planned slots or register extra scoops</p>
+                </div>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 text-amber-400">
+                  {todayStr}
+                </span>
+              </div>
+
+              <div className="divide-y divide-charcoal-800 dark:divide-charcoal-800 light:divide-cream-200">
+                {supplements.map(supp => {
+                  const todayDoses = (supp.doseHistory || []).filter(d => d.date === todayStr);
+                  const scheduledCount = supp.schedule?.length || 1;
+                  const isCompleted = todayDoses.length >= scheduledCount;
+                  const progressLabel = `${todayDoses.length}/${scheduledCount} doses today`;
+
+                  return (
+                    <div key={supp.id} className="py-3.5 flex items-center justify-between flex-wrap gap-3">
+                      <div 
+                        className="cursor-pointer group flex items-center space-x-3"
+                        onClick={() => onSelectSupp(supp.id)}
+                      >
+                        <div className="w-10 h-10 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 flex items-center justify-center font-bold text-amber-400 group-hover:scale-105 transition-transform">
+                          {supp.type === 'protein' ? '🥛' : supp.type === 'creatine' ? '⚡' : supp.type === 'preworkout' ? '🔥' : '💊'}
+                        </div>
+                        <div>
+                          <div className="font-bold group-hover:text-amber-400 transition-colors flex items-center space-x-2">
+                            <span>{supp.name}</span>
+                            {supp.workoutOnly && (
+                              <span className="text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                                Workout
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800 flex items-center space-x-2 mt-0.5">
+                            <span>{progressLabel}</span>
+                            <span>•</span>
+                            <span>{supp.schedule?.join(', ') || '08:00'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => onOpenLogModal(supp)}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
+                            isCompleted
+                              ? 'bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 text-amber-400 hover:bg-charcoal-700'
+                              : 'bg-amber-500 hover:bg-amber-400 text-charcoal-950'
+                          }`}
+                        >
+                          {isCompleted ? '+ Extra Dose' : 'Log Dose'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Spend Breakdown Chart */}
+            <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-5 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex flex-col">
+              <h2 className="text-lg font-bold mb-1">Spend by Supplement</h2>
+              <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800 mb-4">Total investment ($)</p>
+              
+              <div className="h-64 w-full flex-1 min-h-[220px]">
+                {spendData.length > 0 && (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={spendData} layout="vertical" margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                      <XAxis type="number" stroke="#888" fontSize={11} tickFormatter={v => `$${v}`} />
+                      <YAxis type="category" dataKey="name" stroke="#888" fontSize={11} width={80} />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: '#1e1c1a', borderColor: '#d97706', borderRadius: '8px', color: '#fff' }}
+                        formatter={(val) => [`$${val}`, 'Total Spend']}
+                      />
+                      <Bar dataKey="spend" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 2. SUPPLEMENTS TAB & CARDS
+    // ==========================================
+    function SupplementsView({ supplements, onOpenLogModal, onSelectSupp, onOpenNewSuppModal }) {
+      return (
+        <div className="space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h2 className="text-2xl font-black">Your Supplements</h2>
+              <p className="text-sm text-cream-200 dark:text-cream-200 light:text-cream-800">
+                Track remaining stock, doses, and real-time streaks.
+              </p>
+            </div>
+            <button
+              onClick={onOpenNewSuppModal}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-charcoal-950 font-bold text-sm flex items-center space-x-2 shadow-lg shadow-amber-500/20 transition-all"
+            >
+              <span>+ Add Supplement</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {supplements.map(supp => {
+              const streak = calculateStreak(supp);
+              const dailyGrams = (supp.gramsPerScoop || 0) * (supp.scoopsPerDay || 1);
+              const totalConsumed = (supp.doseHistory || []).reduce((acc, d) => acc + (d.grams || 0), 0);
+              const containerWt = supp.containerWeight || 1;
+              const remainingInCurrent = Math.max(0, containerWt - (totalConsumed % containerWt));
+              const percentRemaining = Math.min(100, Math.round((remainingInCurrent / containerWt) * 100));
+              const daysLeft = dailyGrams > 0 ? Math.floor(remainingInCurrent / dailyGrams) : 0;
+              const isLowStock = daysLeft < 7 && (supp.stockCount || 0) === 0;
+
+              const todayDoses = (supp.doseHistory || []).filter(d => d.date === getTodayStr());
+              const isCompletedToday = todayDoses.length >= (supp.schedule?.length || 1);
+
+              return (
+                <div 
+                  key={supp.id}
+                  className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 p-5 flex flex-col justify-between hover:border-amber-500/50 transition-all shadow-md"
+                >
+                  <div>
+                    {/* Header */}
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-12 h-12 rounded-xl bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 flex items-center justify-center text-2xl">
+                          {supp.type === 'protein' ? '🥛' : supp.type === 'creatine' ? '⚡' : supp.type === 'preworkout' ? '🔥' : '💊'}
+                        </div>
+                        <div>
+                          <h3 
+                            className="font-bold text-base hover:text-amber-400 cursor-pointer transition-colors"
+                            onClick={() => onSelectSupp(supp.id)}
+                          >
+                            {supp.name}
+                          </h3>
+                          <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">{supp.brand} • {supp.flavor}</p>
+                        </div>
+                      </div>
+
+                      {/* Live streak badge */}
+                      <div className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 font-black text-xs">
+                        <span>🔥</span>
+                        <span>{streak}d</span>
+                      </div>
+                    </div>
+
+                    {/* Stock & Ring Progress */}
+                    <div className="my-5 flex items-center justify-between bg-charcoal-800/50 dark:bg-charcoal-800/50 light:bg-cream-200/50 p-4 rounded-xl">
+                      {/* Donut progress ring */}
+                      <div className="relative w-16 h-16 flex items-center justify-center">
+                        <svg className="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+                          <path
+                            className="text-charcoal-700 dark:text-charcoal-700 light:text-cream-300"
+                            strokeWidth="3.5"
+                            stroke="currentColor"
+                            fill="none"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          />
+                          <path
+                            className="text-amber-500 transition-all duration-500 ease-out"
+                            strokeDasharray={`${percentRemaining}, 100`}
+                            strokeWidth="3.5"
+                            strokeLinecap="round"
+                            stroke="currentColor"
+                            fill="none"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                          />
+                        </svg>
+                        <span className="absolute text-xs font-bold">{percentRemaining}%</span>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Remaining In Tub</div>
+                        <div className="text-lg font-black">{Math.round(remainingInCurrent)}g / {supp.containerWeight}g</div>
+                        <div className={`text-xs font-semibold ${isLowStock ? 'text-rose-400 font-bold' : 'text-amber-400'}`}>
+                          {daysLeft} days left {supp.stockCount > 0 && `(+${supp.stockCount} extra tubs)`}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Low Stock Banner */}
+                    {isLowStock && (
+                      <div className="mb-4 px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center space-x-1.5">
+                        <span>⚠️</span>
+                        <span>Low stock alert: Reorder soon!</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-2 flex items-center space-x-2">
+                    <button
+                      onClick={() => onSelectSupp(supp.id)}
+                      className="flex-1 py-2 rounded-xl bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 hover:bg-charcoal-700 text-xs font-bold transition-colors"
+                    >
+                      Details & History
+                    </button>
+                    <button
+                      onClick={() => onOpenLogModal(supp)}
+                      className={`px-4 py-2 rounded-xl text-xs font-black transition-all ${
+                        isCompletedToday
+                          ? 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30'
+                          : 'bg-amber-500 hover:bg-amber-400 text-charcoal-950 shadow-md shadow-amber-500/20'
+                      }`}
+                    >
+                      {isCompletedToday ? '+ Extra Dose' : 'Log Dose'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 3. SUPPLEMENT DETAIL VIEW
+    // ==========================================
+    function SupplementDetailView({ supp, orders, onBack, onUpdateSupp, onDeleteSupp, onBackfill, onUndoLast, onOpenLogModal }) {
+      const [backfillDate, setBackfillDate] = useState('');
+      const [newScheduleTime, setNewScheduleTime] = useState('20:00');
+
+      const streak = calculateStreak(supp);
+      const dailyGrams = (supp.gramsPerScoop || 0) * (supp.scoopsPerDay || 1);
+      const costPerGram = (supp.price && supp.containerWeight) ? (supp.price / supp.containerWeight) : 0;
+      const dailyCost = costPerGram * dailyGrams;
+      const monthlyCost = dailyCost * 30;
+
+      const totalConsumed = (supp.doseHistory || []).reduce((acc, d) => acc + (d.grams || 0), 0);
+      const containerWt = supp.containerWeight || 1;
+      const remainingInCurrent = Math.max(0, containerWt - (totalConsumed % containerWt));
+      const daysLeft = dailyGrams > 0 ? Math.floor(remainingInCurrent / dailyGrams) : 0;
+
+      // Reorder date prediction (default 5-day delivery lead time)
+      const leadDays = 5;
+      const reorderDate = new Date();
+      reorderDate.setDate(reorderDate.getDate() + Math.max(0, daysLeft - leadDays));
+
+      // 12-Week Heatmap matrix
+      const heatmapDays = useMemo(() => {
+        const result = [];
+        const today = new Date();
+        const dateToGrams = {};
+        (supp.doseHistory || []).forEach(d => {
+          dateToGrams[d.date] = (dateToGrams[d.date] || 0) + (d.grams || 0);
+        });
+
+        for (let i = 83; i >= 0; i--) {
+          const d = new Date(today);
+          d.setDate(d.getDate() - i);
+          const dStr = formatDate(d);
+          result.push({
+            date: dStr,
+            dayOfWeek: d.getDay(),
+            grams: dateToGrams[dStr] || 0
+          });
+        }
+        return result;
+      }, [supp.doseHistory]);
+
+      // Schedule handlers
+      const handleAddTime = () => {
+        if (!newScheduleTime) return;
+        if (supp.schedule?.includes(newScheduleTime)) return;
+        const updated = [...(supp.schedule || []), newScheduleTime].sort();
+        onUpdateSupp({ ...supp, schedule: updated });
+      };
+
+      const handleRemoveTime = (timeToRemove) => {
+        if (supp.schedule.length <= 1) {
+          alert('You must have at least one scheduled reminder time.');
+          return;
+        }
+        const updated = supp.schedule.filter(t => t !== timeToRemove);
+        onUpdateSupp({ ...supp, schedule: updated });
+      };
+
+      const handleOpenNewContainer = () => {
+        if ((supp.stockCount || 0) <= 0) {
+          alert("No extra unopened containers in stock! Add an order or update stock count first.");
+          return;
+        }
+        onUpdateSupp({
+          ...supp,
+          stockCount: supp.stockCount - 1,
+          openedDate: getTodayStr()
+        });
+      };
+
+      return (
+        <div className="space-y-6 max-w-5xl mx-auto">
+          {/* Top Bar */}
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <button
+              onClick={onBack}
+              className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 hover:text-amber-400 text-xs font-bold transition-colors"
+            >
+              <span>← Back to Supplements</span>
+            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={onUndoLast}
+                className="px-3 py-1.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 hover:bg-charcoal-700 text-xs font-semibold"
+              >
+                ↺ Undo Last Dose
+              </button>
+              <button
+                onClick={() => {
+                  if (confirm(`Delete ${supp.name}? This will delete all dose history.`)) {
+                    onDeleteSupp(supp.id);
+                  }
+                }}
+                className="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500/20 text-xs font-semibold"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
+          {/* Supplement Hero */}
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-6 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200">
+            <div className="flex items-start justify-between flex-wrap gap-4">
+              <div>
+                <span className="text-xs uppercase font-bold text-amber-500 tracking-wider">{supp.brand}</span>
+                <h2 className="text-2xl font-black">{supp.name}</h2>
+                <p className="text-sm text-cream-200 dark:text-cream-200 light:text-cream-800">{supp.flavor} • Opened {supp.openedDate || 'Recently'}</p>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={onOpenLogModal}
+                  className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-charcoal-950 font-black text-sm shadow-lg shadow-amber-500/20"
+                >
+                  Log Dose
+                </button>
+              </div>
+            </div>
+
+            {/* Stat Row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
+              <div className="p-3.5 rounded-xl bg-charcoal-800/60 dark:bg-charcoal-800/60 light:bg-cream-200/60">
+                <div className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Current Streak</div>
+                <div className="text-2xl font-black text-amber-400 mt-1">{streak} days</div>
+              </div>
+              <div className="p-3.5 rounded-xl bg-charcoal-800/60 dark:bg-charcoal-800/60 light:bg-cream-200/60">
+                <div className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Daily / Monthly Cost</div>
+                <div className="text-xl font-bold mt-1">${dailyCost.toFixed(2)} <span className="text-xs font-normal">(${monthlyCost.toFixed(0)}/mo)</span></div>
+              </div>
+              <div className="p-3.5 rounded-xl bg-charcoal-800/60 dark:bg-charcoal-800/60 light:bg-cream-200/60">
+                <div className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Days Left</div>
+                <div className="text-2xl font-black mt-1">{daysLeft}d</div>
+              </div>
+              <div className="p-3.5 rounded-xl bg-charcoal-800/60 dark:bg-charcoal-800/60 light:bg-cream-200/60">
+                <div className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Reorder By (5d Lead)</div>
+                <div className="text-sm font-bold text-amber-400 mt-1">{formatDate(reorderDate)}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* 12-Week Dose Heatmap */}
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-6 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200">
+            <h3 className="text-base font-bold mb-1">12-Week Adherence Heatmap</h3>
+            <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800 mb-4">Every cell represents a day's actual recorded intake.</p>
+            
+            <div className="overflow-x-auto pb-2">
+              <div className="grid grid-flow-col grid-rows-7 gap-1.5 w-max">
+                {heatmapDays.map((d, i) => {
+                  let bg = 'bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200';
+                  if (d.grams > 0) bg = 'bg-amber-500 shadow-sm shadow-amber-500/50';
+                  return (
+                    <div
+                      key={i}
+                      title={`${d.date}: ${d.grams}g`}
+                      className={`w-3.5 h-3.5 rounded-sm ${bg} transition-colors hover:ring-2 hover:ring-amber-400`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Reminder Schedule Editor */}
+            <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-6 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200">
+              <h3 className="text-base font-bold mb-1">Daily Reminder Schedule</h3>
+              <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800 mb-4">Set times you plan to take your doses (AM/PM, pre/post workout).</p>
+
+              <div className="space-y-2 mb-4">
+                {(supp.schedule || ['08:00']).map((time, idx) => (
+                  <div key={idx} className="flex items-center justify-between bg-charcoal-800/50 dark:bg-charcoal-800/50 light:bg-cream-200/50 p-2.5 rounded-xl border border-charcoal-700 dark:border-charcoal-700 light:border-cream-300">
+                    <span className="font-mono text-sm font-bold text-amber-400">{time}</span>
+                    <button
+                      onClick={() => handleRemoveTime(time)}
+                      className="text-xs text-rose-400 hover:text-rose-300 p-1"
+                    >
+                      ✕ Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input 
+                  type="time" 
+                  value={newScheduleTime} 
+                  onChange={(e) => setNewScheduleTime(e.target.value)}
+                  className="bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700 dark:border-charcoal-700 light:border-cream-300 rounded-lg px-3 py-1.5 text-xs font-mono"
+                />
+                <button
+                  onClick={handleAddTime}
+                  className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-charcoal-950 font-bold text-xs"
+                >
+                  + Add Time
+                </button>
+              </div>
+            </div>
+
+            {/* Backfill Tool & Stock Controls */}
+            <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-6 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex flex-col justify-between">
+              <div>
+                <h3 className="text-base font-bold mb-1">Backfill Starting Streak</h3>
+                <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800 mb-3">
+                  Started taking this in real life before using the app? Fill missing days up to yesterday without duplicates.
+                </p>
+
+                <div className="flex items-center space-x-2 mb-6">
+                  <input
+                    type="date"
+                    value={backfillDate}
+                    onChange={(e) => setBackfillDate(e.target.value)}
+                    className="bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700 dark:border-charcoal-700 light:border-cream-300 rounded-lg px-3 py-1.5 text-xs font-mono"
+                  />
+                  <button
+                    onClick={() => handleBackfill(backfillDate)}
+                    className="px-3 py-1.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 hover:bg-charcoal-700 text-amber-400 text-xs font-bold border border-amber-500/30"
+                  >
+                    Backfill Streak
+                  </button>
+                </div>
+              </div>
+
+              {/* Stock Management */}
+              <div className="pt-4 border-t border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold">Unopened Stock</div>
+                  <div className="text-sm text-cream-200 dark:text-cream-200 light:text-cream-800">{supp.stockCount || 0} extra containers</div>
+                </div>
+                <button
+                  onClick={handleOpenNewContainer}
+                  className="px-3.5 py-1.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 hover:bg-charcoal-700 text-xs font-bold text-cream-100 dark:text-cream-100 light:text-cream-900 border border-charcoal-700"
+                >
+                  Open Container From Stock
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Last 10 Dose History Log */}
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-6 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200">
+            <h3 className="text-base font-bold mb-1">Recent Dose History (Last 10)</h3>
+            <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800 mb-4">Edit actual grams consumed or remove entries.</p>
+
+            <div className="divide-y divide-charcoal-800 dark:divide-charcoal-800 light:divide-cream-200">
+              {(supp.doseHistory || []).slice(0, 10).map((d) => (
+                <div key={d.id} className="py-3 flex items-center justify-between flex-wrap gap-2 text-xs">
+                  <div className="flex items-center space-x-3">
+                    <span className="font-mono text-amber-400 font-bold">{d.date}</span>
+                    <span className="text-cream-200 dark:text-cream-200 light:text-cream-800">{d.time} ({d.slot})</span>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
+                      <input
+                        type="number"
+                        value={d.grams}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          const updated = (supp.doseHistory || []).map(item => item.id === d.id ? { ...item, grams: val } : item);
+                          onUpdateSupp({ ...supp, doseHistory: updated });
+                        }}
+                        className="w-16 px-2 py-1 rounded bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700 dark:border-charcoal-700 light:border-cream-300 text-center font-bold"
+                      />
+                      <span>g</span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const updated = (supp.doseHistory || []).filter(item => item.id !== d.id);
+                        onUpdateSupp({ ...supp, doseHistory: updated });
+                      }}
+                      className="text-rose-400 hover:text-rose-300 p-1"
+                      title="Delete Dose"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {(!supp.doseHistory || supp.doseHistory.length === 0) && (
+                <div className="py-4 text-center text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">
+                  No dose entries logged yet.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 4. ORDERS TAB
+    // ==========================================
+    function OrdersView({ orders, supplements, onOpenNewOrderModal, onDeleteOrder }) {
+      return (
+        <div className="space-y-6 max-w-5xl mx-auto">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <h2 className="text-2xl font-black">Orders & Restock History</h2>
+              <p className="text-sm text-cream-200 dark:text-cream-200 light:text-cream-800">
+                Purchase log used to compute average price and restock costs.
+              </p>
+            </div>
+            <button
+              onClick={onOpenNewOrderModal}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-charcoal-950 font-bold text-sm shadow-lg shadow-amber-500/20"
+            >
+              + Log Purchase
+            </button>
+          </div>
+
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 text-cream-200 dark:text-cream-200 light:text-cream-800 uppercase tracking-wider">
+                  <tr>
+                    <th className="p-3.5">Date</th>
+                    <th className="p-3.5">Supplement</th>
+                    <th className="p-3.5">Store</th>
+                    <th className="p-3.5">Price</th>
+                    <th className="p-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-charcoal-800 dark:divide-charcoal-800 light:divide-cream-200">
+                  {orders.map(order => (
+                    <tr key={order.id} className="hover:bg-charcoal-800/40 dark:hover:bg-charcoal-800/40 light:hover:bg-cream-100 transition-colors">
+                      <td className="p-3.5 font-mono text-amber-400">{order.date}</td>
+                      <td className="p-3.5 font-bold">{order.name}</td>
+                      <td className="p-3.5">{order.store || '—'}</td>
+                      <td className="p-3.5 font-black text-sm">${order.price?.toFixed(2)}</td>
+                      <td className="p-3.5 text-right">
+                        <button
+                          onClick={() => onDeleteOrder(order.id)}
+                          className="text-rose-400 hover:text-rose-300 font-bold"
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {orders.length === 0 && (
+                    <tr>
+                      <td colSpan="5" className="p-6 text-center text-cream-200 dark:text-cream-200 light:text-cream-800">
+                        No purchase orders recorded yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 5. EXPENSES VIEW
+    // ==========================================
+    function ExpensesView({ supplements, orders }) {
+      const totalSpent = orders.reduce((acc, o) => acc + (o.price || 0), 0);
+
+      // Monthly projected total spend
+      const monthlyProjected = supplements.reduce((acc, s) => {
+        const dailyGrams = (s.gramsPerScoop || 0) * (s.scoopsPerDay || 1);
+        const costPerGram = (s.price && s.containerWeight) ? (s.price / s.containerWeight) : 0;
+        return acc + (costPerGram * dailyGrams * 30);
+      }, 0);
+
+      // Pie chart data
+      const pieData = supplements.map(s => {
+        const suppOrders = orders.filter(o => o.supplementId === s.id);
+        const spent = suppOrders.reduce((acc, o) => acc + (o.price || 0), 0) || (s.price || 0);
+        return { name: s.name, value: Number(spent.toFixed(2)) };
+      });
+
+      const COLORS = ['#f59e0b', '#d97706', '#b45309', '#78350f', '#fbbf24', '#fde68a'];
+
+      return (
+        <div className="space-y-6 max-w-5xl mx-auto">
+          <div>
+            <h2 className="text-2xl font-black">Expense Analytics</h2>
+            <p className="text-sm text-cream-200 dark:text-cream-200 light:text-cream-800">
+              Financial breakdown across your supplement stack.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-5 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200">
+              <span className="text-xs uppercase font-bold text-amber-500">Total Historic Spend</span>
+              <div className="text-3xl font-black mt-2">${totalSpent.toFixed(2)}</div>
+            </div>
+            <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-5 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200">
+              <span className="text-xs uppercase font-bold text-amber-500">Projected Run Rate</span>
+              <div className="text-3xl font-black mt-2">${monthlyProjected.toFixed(2)} <span className="text-sm font-normal text-cream-200 dark:text-cream-200 light:text-cream-800">/ month</span></div>
+            </div>
+          </div>
+
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-6 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200">
+            <h3 className="text-base font-bold mb-4">Spend Share by Supplement</h3>
+            <div className="h-72 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={5}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#1e1c1a', borderColor: '#d97706', borderRadius: '8px', color: '#fff' }}
+                    formatter={(v) => `$${v}`}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 6. SETTINGS VIEW
+    // ==========================================
+    function SettingsView({ supplements, orders, theme, setTheme, notificationsEnabled, setNotificationsEnabled, onRestoreData, lastSavedText }) {
+      const fileInputRef = useRef(null);
+
+      const handleExport = () => {
+        const backupData = {
+          version: '1.0',
+          exportDate: new Date().toISOString(),
+          supplements,
+          orders
+        };
+        const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `supplement-tracker-pro-backup-${getTodayStr()}.json`;
+        a.click();
+      };
+
+      const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const parsed = JSON.parse(event.target.result);
+            onRestoreData(parsed);
+          } catch (err) {
+            alert('Invalid JSON backup file.');
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      const toggleNotifications = async () => {
+        if (!notificationsEnabled) {
+          if ('Notification' in window) {
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+              setNotificationsEnabled(true);
+              localStorage.setItem('stp_notifications', 'true');
+            } else {
+              alert('Notification permission was denied in your browser settings.');
+            }
+          } else {
+            alert('Browser notifications are not supported in this browser.');
+          }
+        } else {
+          setNotificationsEnabled(false);
+          localStorage.setItem('stp_notifications', 'false');
+        }
+      };
+
+      return (
+        <div className="space-y-6 max-w-4xl mx-auto">
+          <div>
+            <h2 className="text-2xl font-black">Settings & Data</h2>
+            <p className="text-sm text-cream-200 dark:text-cream-200 light:text-cream-800">
+              Manage reminders, backups, and app preferences.
+            </p>
+          </div>
+
+          {/* Sync & Storage Status */}
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-5 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold">Local Persistence Status</h3>
+              <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">All data autosaves continuously to browser localStorage.</p>
+            </div>
+            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span>{lastSavedText}</span>
+            </div>
+          </div>
+
+          {/* Notification Reminders */}
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-5 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold">Scheduled Dose Reminders</h3>
+              <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Checks every 30 seconds for scheduled times and sends native browser notifications.</p>
+            </div>
+            <button
+              onClick={toggleNotifications}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                notificationsEnabled 
+                  ? 'bg-amber-500 text-charcoal-950' 
+                  : 'bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 text-cream-100 dark:text-cream-100 light:text-cream-900'
+              }`}
+            >
+              {notificationsEnabled ? 'Enabled ✓' : 'Enable Reminders'}
+            </button>
+          </div>
+
+          {/* Theme Setting */}
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-5 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-bold">App Theme</h3>
+              <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Switch between dark locker room and light aesthetic.</p>
+            </div>
+            <button
+              onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+              className="px-4 py-2 rounded-xl bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 text-xs font-bold"
+            >
+              {theme === 'dark' ? '🌙 Dark Mode' : '☀️ Light Mode'}
+            </button>
+          </div>
+
+          {/* Local Backup & Restore */}
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 p-5 rounded-2xl border border-charcoal-800 dark:border-charcoal-800 light:border-cream-200 space-y-4">
+            <div>
+              <h3 className="text-sm font-bold">Backup & Restore</h3>
+              <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Export your dose logs and supplement catalog to JSON or restore a previous snapshot.</p>
+            </div>
+
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={handleExport}
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-charcoal-950 font-bold text-xs shadow-md shadow-amber-500/20"
+              >
+                📥 Export JSON Backup
+              </button>
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="px-4 py-2 rounded-xl bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 hover:bg-charcoal-700 text-xs font-bold"
+              >
+                📤 Restore from File
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept=".json"
+                className="hidden"
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==========================================
+    // 7. MODALS
+    // ==========================================
+    // Quick Log Dose Modal
+    function LogDoseModal({ supp, onClose, onConfirm }) {
+      const todayStr = getTodayStr();
+      const todayDoses = (supp.doseHistory || []).filter(d => d.date === todayStr);
+      const scheduledSlots = supp.schedule || ['08:00'];
+      
+      // Filter slots that haven't been logged yet today
+      const remainingSlots = scheduledSlots.filter(slot => !todayDoses.some(d => d.slot === slot));
+      
+      const defaultSlot = remainingSlots.length > 0 ? remainingSlots[0] : 'Extra';
+      const [selectedSlot, setSelectedSlot] = useState(defaultSlot);
+
+      // Default grams per slot
+      const totalDailyGrams = (supp.gramsPerScoop || 5) * (supp.scoopsPerDay || 1);
+      const defaultGramsPerSlot = Number((totalDailyGrams / (scheduledSlots.length || 1)).toFixed(1));
+      const [grams, setGrams] = useState(defaultGramsPerSlot);
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 w-full max-w-md p-6 rounded-3xl border border-charcoal-700 dark:border-charcoal-700 light:border-cream-300 shadow-2xl space-y-5">
+            <div>
+              <span className="text-xs uppercase font-bold text-amber-500">Quick Log</span>
+              <h3 className="text-xl font-black">{supp.name}</h3>
+              <p className="text-xs text-cream-200 dark:text-cream-200 light:text-cream-800">Select scheduled time slot & confirm actual grams taken.</p>
+            </div>
+
+            {/* Slot selector */}
+            <div>
+              <label className="block text-xs font-bold mb-2">Schedule Slot</label>
+              <div className="flex flex-wrap gap-2">
+                {scheduledSlots.map(slot => {
+                  const isDone = todayDoses.some(d => d.slot === slot);
+                  return (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => setSelectedSlot(slot)}
+                      className={`px-3 py-2 rounded-xl text-xs font-mono font-bold transition-all ${
+                        selectedSlot === slot 
+                          ? 'bg-amber-500 text-charcoal-950 ring-2 ring-amber-400' 
+                          : 'bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 text-cream-100 dark:text-cream-100 light:text-cream-900'
+                      }`}
+                    >
+                      {slot} {isDone && '✓'}
+                    </button>
+                  );
+                })}
+                <button
+                  type="button"
+                  onClick={() => setSelectedSlot('Extra')}
+                  className={`px-3 py-2 rounded-xl text-xs font-mono font-bold transition-all ${
+                    selectedSlot === 'Extra' 
+                      ? 'bg-amber-500 text-charcoal-950 ring-2 ring-amber-400' 
+                      : 'bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 text-cream-100 dark:text-cream-100 light:text-cream-900'
+                  }`}
+                >
+                  + Extra Dose
+                </button>
+              </div>
+            </div>
+
+            {/* Grams input */}
+            <div>
+              <label className="block text-xs font-bold mb-2">Grams Taken</label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.1"
+                  value={grams}
+                  onChange={(e) => setGrams(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-xl bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700 dark:border-charcoal-700 light:border-cream-300 font-black text-lg focus:outline-none focus:border-amber-500"
+                />
+                <span className="absolute right-4 top-3 text-xs font-bold text-cream-200 dark:text-cream-200 light:text-cream-800">grams</span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex-1 py-2.5 rounded-xl bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 font-bold text-xs hover:bg-charcoal-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => onConfirm(selectedSlot, grams)}
+                className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-charcoal-950 font-black text-xs shadow-lg shadow-amber-500/20"
+              >
+                Confirm Dose
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // New Supplement Modal
+    function NewSupplementModal({ onClose, onAdd }) {
+      const [formData, setFormData] = useState({
+        name: '',
+        brand: '',
+        flavor: '',
+        type: 'protein',
+        containerWeight: 1000,
+        gramsPerScoop: 30,
+        scoopsPerDay: 1,
+        price: 39.99,
+        store: '',
+        openedDate: getTodayStr(),
+        workoutOnly: false,
+        stockCount: 0,
+        scheduleStr: '08:00'
+      });
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        if (!formData.name) return;
+        const schedule = formData.scheduleStr.split(',').map(s => s.trim()).filter(Boolean);
+        onAdd({
+          ...formData,
+          id: 'supp-' + Date.now(),
+          containerWeight: Number(formData.containerWeight),
+          gramsPerScoop: Number(formData.gramsPerScoop),
+          scoopsPerDay: Number(formData.scoopsPerDay),
+          price: Number(formData.price),
+          stockCount: Number(formData.stockCount),
+          schedule: schedule.length > 0 ? schedule : ['08:00'],
+          doseHistory: []
+        });
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 w-full max-w-lg p-6 rounded-3xl border border-charcoal-700 dark:border-charcoal-700 light:border-cream-300 shadow-2xl my-8">
+            <h3 className="text-xl font-black mb-4">Add New Supplement</h3>
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold block mb-1">Name</label>
+                  <input required placeholder="e.g. 100% Whey" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Brand</label>
+                  <input placeholder="e.g. Optimum Nutrition" value={formData.brand} onChange={e => setFormData({ ...formData, brand: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold block mb-1">Flavor</label>
+                  <input placeholder="e.g. Vanilla" value={formData.flavor} onChange={e => setFormData({ ...formData, flavor: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Type</label>
+                  <select value={formData.type} onChange={e => setFormData({ ...formData, type: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700">
+                    <option value="protein">Protein</option>
+                    <option value="creatine">Creatine</option>
+                    <option value="preworkout">Pre-Workout</option>
+                    <option value="vitamin">Vitamin</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bold block mb-1">Tub Size (g)</label>
+                  <input type="number" value={formData.containerWeight} onChange={e => setFormData({ ...formData, containerWeight: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Grams/Scoop</label>
+                  <input type="number" step="0.1" value={formData.gramsPerScoop} onChange={e => setFormData({ ...formData, gramsPerScoop: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Scoops/Day</label>
+                  <input type="number" step="0.5" value={formData.scoopsPerDay} onChange={e => setFormData({ ...formData, scoopsPerDay: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="font-bold block mb-1">Price ($)</label>
+                  <input type="number" step="0.01" value={formData.price} onChange={e => setFormData({ ...formData, price: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Extra Unopened</label>
+                  <input type="number" value={formData.stockCount} onChange={e => setFormData({ ...formData, stockCount: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Store</label>
+                  <input placeholder="e.g. Amazon" value={formData.store} onChange={e => setFormData({ ...formData, store: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1">Reminder Schedule (comma separated times, 24h format)</label>
+                <input placeholder="08:00, 18:00" value={formData.scheduleStr} onChange={e => setFormData({ ...formData, scheduleStr: e.target.value })} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700 font-mono" />
+              </div>
+
+              <div className="flex items-center space-x-2 pt-2">
+                <input type="checkbox" id="woOnly" checked={formData.workoutOnly} onChange={e => setFormData({ ...formData, workoutOnly: e.target.checked })} className="rounded bg-charcoal-800" />
+                <label htmlFor="woOnly" className="font-semibold">Workout days only</label>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-4">
+                <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 font-bold">Cancel</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-charcoal-950 font-black">Save Supplement</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // New Order Modal
+    function NewOrderModal({ supplements, onClose, onAdd }) {
+      const [suppId, setSuppId] = useState(supplements[0]?.id || '');
+      const [price, setPrice] = useState(39.99);
+      const [store, setStore] = useState('Amazon');
+      const [date, setDate] = useState(getTodayStr());
+      const [addStock, setAddStock] = useState(true);
+
+      const handleSubmit = (e) => {
+        e.preventDefault();
+        const supp = supplements.find(s => s.id === suppId);
+        onAdd({
+          id: 'ord-' + Date.now(),
+          supplementId: suppId,
+          name: supp ? supp.name : 'Unknown',
+          price: Number(price),
+          store,
+          date,
+          addStock
+        });
+      };
+
+      return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="bg-charcoal-900 dark:bg-charcoal-900 light:bg-cream-50 w-full max-w-md p-6 rounded-3xl border border-charcoal-700 dark:border-charcoal-700 light:border-cream-300 shadow-2xl">
+            <h3 className="text-xl font-black mb-4">Log Purchase Order</h3>
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+              <div>
+                <label className="font-bold block mb-1">Supplement</label>
+                <select value={suppId} onChange={e => setSuppId(e.target.value)} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700">
+                  {supplements.map(s => <option key={s.id} value={s.id}>{s.name} ({s.brand})</option>)}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold block mb-1">Price Paid ($)</label>
+                  <input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">Date</label>
+                  <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1">Store / Website</label>
+                <input value={store} onChange={e => setStore(e.target.value)} className="w-full p-2.5 rounded-lg bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 border border-charcoal-700" />
+              </div>
+
+              <div className="flex items-center space-x-2 pt-1">
+                <input type="checkbox" id="addStockCheck" checked={addStock} onChange={e => setAddStock(e.target.checked)} className="rounded bg-charcoal-800" />
+                <label htmlFor="addStockCheck" className="font-semibold">+1 to unopened container stock</label>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-4">
+                <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-xl bg-charcoal-800 dark:bg-charcoal-800 light:bg-cream-200 font-bold">Cancel</button>
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-charcoal-950 font-black">Record Purchase</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // Render root
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
